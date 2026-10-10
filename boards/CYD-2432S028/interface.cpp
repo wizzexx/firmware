@@ -3,6 +3,7 @@
 #include "core/utils.h"
 #include <Arduino.h>
 #include <interface.h>
+#include <LittleFS.h>
 
 #if defined(HAS_CAPACITIVE_TOUCH)
 #if defined(TOUCH_GT911_I2C)
@@ -13,7 +14,7 @@ struct TouchPointPro {
     int16_t y = 0;
 };
 #else
-#include "CYD28_TouchscreenC.h"
+#include "CYD28_TouchC.h"
 #define CYD28_DISPLAY_HOR_RES_MAX 240
 #define CYD28_DISPLAY_VER_RES_MAX 320
 CYD28_TouchC touch(CYD28_DISPLAY_HOR_RES_MAX, CYD28_DISPLAY_VER_RES_MAX);
@@ -34,8 +35,6 @@ CYD28_TouchR touch(CYD28_DISPLAY_HOR_RES_MAX, CYD28_DISPLAY_VER_RES_MAX);
 
 /***************************************************************************************
 ** Function name: _setup_gpio()
-** Location: main.cpp
-** Description:   initial setup for the device
 ***************************************************************************************/
 SPIClass touchSPI;
 void _setup_gpio() {
@@ -77,16 +76,45 @@ void _setup_gpio() {
 
 /***************************************************************************************
 ** Function name: _post_setup_gpio()
-** Location: main.cpp
-** Description:   second stage gpio setup
 ***************************************************************************************/
 void _post_setup_gpio() {
 #if defined(USE_TFT_eSPI_TOUCH)
     #if defined(TOUCH_CS) && (TOUCH_CS >= 0)
     pinMode(TOUCH_CS, OUTPUT);
     #endif
-    // Базовая калибровка XPT2046 для дисплея 2.8" ILI9341
-    uint16_t calData[5] = { 275, 3494, 361, 3528, 4 };
+
+    LittleFS.begin(true);
+    uint16_t calData[5];
+    bool needsCalibrate = true;
+
+    // Проверяем, есть ли сохранённая калибровка в памяти
+    if (LittleFS.exists("/calData")) {
+        File caldata = LittleFS.open("/calData", "r");
+        if (caldata) {
+            for (int i = 0; i < 5; i++) {
+                String line = caldata.readStringUntil('\n');
+                calData[i] = line.toInt();
+            }
+            caldata.close();
+            if (calData[0] > 0 && calData[1] > 0) {
+                needsCalibrate = false;
+            }
+        }
+    }
+
+    // Если калибровки нет — выводим калибровочные крестики по 4 углам
+    if (needsCalibrate) {
+        tft.fillScreen(TFT_BLACK);
+        tft.setRotation(ROTATION);
+        tft.calibrateTouch(calData, TFT_WHITE, TFT_RED, 15);
+
+        File caldata = LittleFS.open("/calData", "w");
+        if (caldata) {
+            caldata.printf("%d\n%d\n%d\n%d\n%d\n", calData[0], calData[1], calData[2], calData[3], calData[4]);
+            caldata.close();
+        }
+    }
+
     tft.setTouch(calData);
 #endif
 
@@ -96,7 +124,7 @@ void _post_setup_gpio() {
     ledcWrite(TFT_BL, 255);
 #endif
 
-    // Принудительное отключение инверсии для правильных цветов (чёрный фон)
+    // Отключение инверсии цветов
     bruceConfig.colorInverted = 0;
     tft.invertDisplay(0);
 
@@ -200,7 +228,8 @@ void InputHandler(void) {
         if (touch.touched()) {
             auto t = touch.getPointScaled();
 #endif
-#if !defined(TOUCH_GT911_I2C)
+
+#if !defined(TOUCH_GT911_I2C) && !defined(USE_TFT_eSPI_TOUCH)
             if (bruceConfigPins.rotation == 3) {
                 t.y = (tftHeight + 20) - t.y;
                 t.x = tftWidth - t.x;
