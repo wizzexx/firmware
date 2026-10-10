@@ -40,8 +40,10 @@ CYD28_TouchR touch(CYD28_DISPLAY_HOR_RES_MAX, CYD28_DISPLAY_VER_RES_MAX);
 SPIClass touchSPI;
 void _setup_gpio() {
 #ifndef HAS_CAPACITIVE_TOUCH // Capacitive Touchscreen uses I2C to communicate
+    #if defined(XPT2046_CS) && (XPT2046_CS >= 0)
     pinMode(XPT2046_CS, OUTPUT);
     digitalWrite(XPT2046_CS, HIGH);
+    #endif
 #endif
 
 #if defined(HAS_CAPACITIVE_TOUCH)
@@ -80,7 +82,9 @@ void _setup_gpio() {
 ***************************************************************************************/
 void _post_setup_gpio() {
 #if defined(USE_TFT_eSPI_TOUCH)
+    #if defined(TOUCH_CS) && (TOUCH_CS >= 0)
     pinMode(TOUCH_CS, OUTPUT);
+    #endif
     uint16_t calData[5];
     File caldata = LittleFS.open("/calData", "r");
 
@@ -108,14 +112,13 @@ void _post_setup_gpio() {
     tft.setTouch(calData);
 #endif
 
-    // Brightness control must be initialized after tft in this case @Pirata
+    // Brightness control guarded for direct 3.3V wiring
+#if defined(TFT_BL) && (TFT_BL >= 0)
     pinMode(TFT_BL, OUTPUT);
     ledcAttach(TFT_BL, TFT_BRIGHT_FREQ, TFT_BRIGHT_Bits);
     ledcWrite(TFT_BL, 255);
+#endif
 
-    // Force sync color inversion to prevent bruceConf.json from overriding
-    // the value set in _setup_gpio(). For CYD variants with TFT_INVERSION_ON,
-    // the init() sequence sends INVON; we send INVOFF here to ensure normal colors.
 #ifdef TFT_INVERSION_ON
     bruceConfig.colorInverted = 0;
     tft.invertDisplay(0);
@@ -129,20 +132,20 @@ void _post_setup_gpio() {
     bruceConfigPins.gpsBaudrate = 9600;
 
     bool pinsChanged = false;
-    if (bruceConfigPins.rfTx != 22) {
-        bruceConfigPins.rfTx = 22;
+    if (bruceConfigPins.rfTx != 2) {
+        bruceConfigPins.rfTx = 2;
         pinsChanged = true;
     }
-    if (bruceConfigPins.rfRx != 27) {
-        bruceConfigPins.rfRx = 27;
+    if (bruceConfigPins.rfRx != 1) {
+        bruceConfigPins.rfRx = 1;
         pinsChanged = true;
     }
-    if (bruceConfigPins.irTx != 22) {
-        bruceConfigPins.irTx = 22;
+    if (bruceConfigPins.irTx != 2) {
+        bruceConfigPins.irTx = 2;
         pinsChanged = true;
     }
-    if (bruceConfigPins.irRx != 27) {
-        bruceConfigPins.irRx = 27;
+    if (bruceConfigPins.irRx != 1) {
+        bruceConfigPins.irRx = 1;
         pinsChanged = true;
     }
     if (pinsChanged) bruceConfigPins.saveFile();
@@ -154,6 +157,7 @@ void _post_setup_gpio() {
 ** set brightness value
 **********************************************************************/
 void _setBrightness(uint8_t brightval) {
+#if defined(TFT_BL) && (TFT_BL >= 0)
     int dutyCycle;
     if (brightval == 100) dutyCycle = 255;
     else if (brightval == 75) dutyCycle = 130;
@@ -162,8 +166,8 @@ void _setBrightness(uint8_t brightval) {
     else if (brightval == 0) dutyCycle = 0;
     else dutyCycle = ((brightval * 255) / 100);
 
-    // log_i("dutyCycle for bright 0-255: %d", dutyCycle);
     ledcWrite(TFT_BL, dutyCycle);
+#endif
 }
 
 /*********************************************************************
@@ -173,8 +177,6 @@ void _setBrightness(uint8_t brightval) {
 void InputHandler(void) {
     static long d_tmp = 0;
     if (millis() - d_tmp > 200 || LongPress) {
-        // I know R3CK.. I Should NOT nest if statements..
-        // but it is needed to not keep SPI bus used without need, it save resources
 #if defined(USE_TFT_eSPI_TOUCH)
         TouchPoint t;
         checkPowerSaveTime();
@@ -220,19 +222,16 @@ void InputHandler(void) {
             }
             rot = bruceConfigPins.rotation;
         }
-        // Track touch state to prevent double events on press/release
+
         static bool lastTouchState = false;
         static unsigned long lastTouchTime = 0;
 
         touched = touch.getPoint(&t.x, &t.y);
         bool currentTouchState = touched > 0;
 
-        // Only process new touch presses with debouncing
         if (currentTouchState && !lastTouchState && (millis() - lastTouchTime) > 100) {
-            // This is a genuine new touch press
             lastTouchTime = millis();
         } else if (!currentTouchState || lastTouchState) {
-            // Touch release or continuing touch - ignore
             touched = 0;
         }
         lastTouchState = currentTouchState;
@@ -243,7 +242,6 @@ void InputHandler(void) {
             auto t = touch.getPointScaled();
 #endif
 #if !defined(TOUCH_GT911_I2C)
-            // Serial.printf("\nRAW: Touch Pressed on x=%d, y=%d",t.x, t.y);
             if (bruceConfigPins.rotation == 3) {
                 t.y = (tftHeight + 20) - t.y;
                 t.x = tftWidth - t.x;
@@ -259,12 +257,10 @@ void InputHandler(void) {
                 t.y = (tftHeight + 20) - tmp;
             }
 #endif
-            // Serial.printf("\nROT: Touch Pressed on x=%d, y=%d\n", t.x, t.y);
 
             if (!wakeUpScreen()) AnyKeyPress = true;
             else goto END;
 
-            // Touch point global variable
             touchPoint.x = t.x;
             touchPoint.y = t.y;
             touchPoint.pressed = true;
