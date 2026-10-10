@@ -378,11 +378,8 @@ bool handleCharacterAdd(
 
     current_text += character;
     if (current_text.length() != (max_FP_size + 1)) {
-        if (mask_input) {
-            tft.print("*");
-        } else {
-            tft.print(character);
-        }
+        // Всегда выводим реальный символ вместо звездочки
+        tft.print(character);
     }
     cursor_x = tft.getCursorX();
     cursor_y = tft.getCursorY();
@@ -404,6 +401,7 @@ KeyboardAction handleKeyboardSelection(
     int &x, int &y, String &current_text, bool &caps, bool &direction, int &cursor_x, int &cursor_y,
     const int max_size, char character, bool mask_input
 ) {
+    mask_input = false;
     tft.setCursor(cursor_x, cursor_y);
 
     if (y == -1) {
@@ -450,6 +448,9 @@ String generalKeyboard(
     String current_text, int max_size, String textbox_title, char keys[KeyboardHeight][KeyboardWidth][2],
     bool mask_input = false
 ) {
+    // Принудительно отключаем маскировку звездочками
+    mask_input = false;
+
     max_FM_size = tftWidth / (LW * FM) - 1;
     max_FP_size = tftWidth / (LW)-2;
     resetTftDisplay();
@@ -714,20 +715,18 @@ String generalKeyboard(
                 if (current_text.length() >
                     max_FP_size) { // if its still too long, we divide it into two lines
                     tft.drawString(
-                        (mask_input ? repeatString(current_text.substring(0, max_FP_size).length(), "*")
-                                    : current_text.substring(0, max_FP_size)),
+                        current_text.substring(0, max_FP_size),
                         5,
                         textbox_text_y
                     );
                     tft.drawString(
-                        (mask_input ? repeatString(current_text.length() - max_FP_size, "*")
-                                    : current_text.substring(max_FP_size, current_text.length())),
+                        current_text.substring(max_FP_size, current_text.length()),
                         5,
                         textbox_text_y + LH * FP
                     );
                 } else {
                     tft.drawString(
-                        (mask_input ? repeatString(current_text.length(), "*") : current_text),
+                        current_text,
                         5,
                         textbox_text_y
                     );
@@ -735,7 +734,7 @@ String generalKeyboard(
             } else {
                 // else if it fits, just draw the text
                 tft.drawString(
-                    (mask_input ? repeatString(current_text.length(), "*") : current_text), 5, textbox_text_y
+                    current_text, 5, textbox_text_y
                 );
             }
             // Draw the textbox border again(?)
@@ -1345,16 +1344,16 @@ String keyboard(const String &current_text, int max_size, const String &textbox_
     String lang = bruceConfig.keyboardLang;
     if (lang == "AZERTY") {
         return generalKeyboard<azerty_keyboard_height, azerty_keyboard_width>(
-            current_text, max_size, textbox_title, azerty_keyset, mask_input
+            current_text, max_size, textbox_title, azerty_keyset, false
         );
     } else if (lang == "QWERTZ") {
         return generalKeyboard<qwertz_keyboard_height, qwertz_keyboard_width>(
-            current_text, max_size, textbox_title, qwertz_keyset, mask_input
+            current_text, max_size, textbox_title, qwertz_keyset, false
         );
     } else {
         // Default: QWERTY
         return generalKeyboard<qwerty_keyboard_height, qwerty_keyboard_width>(
-            current_text, max_size, textbox_title, qwerty_keyset, mask_input
+            current_text, max_size, textbox_title, qwerty_keyset, false
         );
     }
 }
@@ -1363,7 +1362,7 @@ String keyboard(const String &current_text, int max_size, const String &textbox_
 /// Returns the user typed strings, return the ASCII ESC character if the operation was cancelled
 String hex_keyboard(const String &current_text, int max_size, const String &textbox_title, bool mask_input) {
     return generalKeyboard<hex_keyboard_height, hex_keyboard_width>(
-        current_text, max_size, textbox_title, hex_keyset, mask_input
+        current_text, max_size, textbox_title, hex_keyset, false
     );
 }
 
@@ -1371,7 +1370,7 @@ String hex_keyboard(const String &current_text, int max_size, const String &text
 /// if the operation was cancelled
 String num_keyboard(const String &current_text, int max_size, const String &textbox_title, bool mask_input) {
     return generalKeyboard<numpad_keyboard_height, numpad_keyboard_width>(
-        current_text, max_size, textbox_title, numpad_keyset, mask_input
+        current_text, max_size, textbox_title, numpad_keyset, false
     );
 }
 
