@@ -39,7 +39,7 @@ CYD28_TouchR touch(CYD28_DISPLAY_HOR_RES_MAX, CYD28_DISPLAY_VER_RES_MAX);
 ***************************************************************************************/
 SPIClass touchSPI;
 void _setup_gpio() {
-#ifndef HAS_CAPACITIVE_TOUCH // Capacitive Touchscreen uses I2C to communicate
+#ifndef HAS_CAPACITIVE_TOUCH
     #if defined(XPT2046_CS) && (XPT2046_CS >= 0)
     pinMode(XPT2046_CS, OUTPUT);
     digitalWrite(XPT2046_CS, HIGH);
@@ -64,7 +64,7 @@ void _setup_gpio() {
         Serial.println("Failed to find GT911 - check your wiring!");
     }
 #else
-#if !defined(USE_TFT_eSPI_TOUCH) // Use libraries
+#if !defined(USE_TFT_eSPI_TOUCH)
     if (!touch.begin()) {
         Serial.println("Touch IC not Started");
         log_i("Touch IC not Started");
@@ -78,41 +78,18 @@ void _setup_gpio() {
 /***************************************************************************************
 ** Function name: _post_setup_gpio()
 ** Location: main.cpp
-** Description:   second stage gpio setup to make a few functions work
+** Description:   second stage gpio setup
 ***************************************************************************************/
 void _post_setup_gpio() {
 #if defined(USE_TFT_eSPI_TOUCH)
     #if defined(TOUCH_CS) && (TOUCH_CS >= 0)
     pinMode(TOUCH_CS, OUTPUT);
     #endif
-    uint16_t calData[5];
-    File caldata = LittleFS.open("/calData", "r");
-
-    if (!caldata) {
-        tft.setRotation(ROTATION);
-        tft.calibrateTouch(calData, TFT_WHITE, TFT_BLACK, 10);
-
-        caldata = LittleFS.open("/calData", "w");
-        if (caldata) {
-            caldata.printf(
-                "%d\n%d\n%d\n%d\n%d\n", calData[0], calData[1], calData[2], calData[3], calData[4]
-            );
-            caldata.close();
-        }
-    } else {
-        Serial.print("\ntft Calibration data: ");
-        for (int i = 0; i < 5; i++) {
-            String line = caldata.readStringUntil('\n');
-            calData[i] = line.toInt();
-            Serial.printf("%d, ", calData[i]);
-        }
-        Serial.println();
-        caldata.close();
-    }
+    // Базовая калибровка под 2.8" ILI9341 без чтения несмонтированной FS
+    uint16_t calData[5] = { 275, 3494, 361, 3528, 4 };
     tft.setTouch(calData);
 #endif
 
-    // Brightness control guarded for direct 3.3V wiring
 #if defined(TFT_BL) && (TFT_BL >= 0)
     pinMode(TFT_BL, OUTPUT);
     ledcAttach(TFT_BL, TFT_BRIGHT_FREQ, TFT_BRIGHT_Bits);
@@ -131,30 +108,14 @@ void _post_setup_gpio() {
     bruceConfigPins.gps_bus.tx = (gpio_num_t)GPS_SERIAL_TX;
     bruceConfigPins.gpsBaudrate = 9600;
 
-    bool pinsChanged = false;
-    if (bruceConfigPins.rfTx != 2) {
-        bruceConfigPins.rfTx = 2;
-        pinsChanged = true;
-    }
-    if (bruceConfigPins.rfRx != 1) {
-        bruceConfigPins.rfRx = 1;
-        pinsChanged = true;
-    }
-    if (bruceConfigPins.irTx != 2) {
-        bruceConfigPins.irTx = 2;
-        pinsChanged = true;
-    }
-    if (bruceConfigPins.irRx != 1) {
-        bruceConfigPins.irRx = 1;
-        pinsChanged = true;
-    }
-    if (pinsChanged) bruceConfigPins.saveFile();
+    bruceConfigPins.rfTx = 2;
+    bruceConfigPins.rfRx = 1;
+    bruceConfigPins.irTx = 2;
+    bruceConfigPins.irRx = 1;
 }
 
 /*********************************************************************
 ** Function: setBrightness
-** location: settings.cpp
-** set brightness value
 **********************************************************************/
 void _setBrightness(uint8_t brightval) {
 #if defined(TFT_BL) && (TFT_BL >= 0)
@@ -172,7 +133,6 @@ void _setBrightness(uint8_t brightval) {
 
 /*********************************************************************
 ** Function: InputHandler
-** Handles the variables PrevPress, NextPress, SelPress, AnyKeyPress and EscPress
 **********************************************************************/
 void InputHandler(void) {
     static long d_tmp = 0;
@@ -180,8 +140,11 @@ void InputHandler(void) {
 #if defined(USE_TFT_eSPI_TOUCH)
         TouchPoint t;
         checkPowerSaveTime();
-        bool _IH_touched = tft.getTouch(&t.x, &t.y);
+        uint16_t tx = 0, ty = 0;
+        bool _IH_touched = tft.getTouch(&tx, &ty);
         if (_IH_touched) {
+            t.x = tx;
+            t.y = ty;
             NextPress = false;
             PrevPress = false;
             UpPress = false;
@@ -271,19 +234,9 @@ void InputHandler(void) {
     }
 }
 
-/*********************************************************************
-** Function: powerOff
-** location: mykeyboard.cpp
-** Turns off the device (or try to)
-**********************************************************************/
 void powerOff() {
     esp_sleep_enable_ext0_wakeup(GPIO_NUM_0, LOW);
     esp_deep_sleep_start();
 }
 
-/*********************************************************************
-** Function: checkReboot
-** location: mykeyboard.cpp
-** Btn logic to turn off the device (name is odd btw)
-**********************************************************************/
 void checkReboot() {}
