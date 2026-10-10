@@ -85,7 +85,7 @@ void _post_setup_gpio() {
     #if defined(TOUCH_CS) && (TOUCH_CS >= 0)
     pinMode(TOUCH_CS, OUTPUT);
     #endif
-    // Базовая калибровка под 2.8" ILI9341 без чтения несмонтированной FS
+    // Базовая калибровка XPT2046 для дисплея 2.8" ILI9341
     uint16_t calData[5] = { 275, 3494, 361, 3528, 4 };
     tft.setTouch(calData);
 #endif
@@ -96,13 +96,9 @@ void _post_setup_gpio() {
     ledcWrite(TFT_BL, 255);
 #endif
 
-#ifdef TFT_INVERSION_ON
+    // Принудительное отключение инверсии для правильных цветов (чёрный фон)
     bruceConfig.colorInverted = 0;
     tft.invertDisplay(0);
-#else
-    bruceConfig.colorInverted = 1;
-    tft.invertDisplay(1);
-#endif
 
     bruceConfigPins.gps_bus.rx = (gpio_num_t)GPS_SERIAL_RX;
     bruceConfigPins.gps_bus.tx = (gpio_num_t)GPS_SERIAL_TX;
